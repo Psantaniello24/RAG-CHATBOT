@@ -5,7 +5,9 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader, TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.output_parsers import StrOutputParser
 from langchain.memory import ConversationBufferMemory
 import fitz  # PyMuPDF
 from typing import List, Tuple
@@ -87,14 +89,28 @@ def create_chain(vector_store):
         model_name=st.session_state.model_name,
         temperature=0.7
     )
+
+    # Create a template for combining retrieval results with the question
+    template = """Answer the following question based on the provided context. If you cannot find the answer in the context, say so.
+
+Context: {context}
+
+Question: {question}
+
+Answer: """
+
+    prompt = ChatPromptTemplate.from_template(template)
     
-    chain = ConversationalRetrievalChain.from_llm(
-        llm=llm,
-        retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
-        memory=memory,
-        return_source_documents=True,
-        get_chat_history=lambda h: h  # Return raw chat history
+    # Create the retrieval chain
+    retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+    
+    chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
     )
+
     return chain
 
 def generate_response(query: str) -> str:
@@ -111,41 +127,53 @@ def generate_response(query: str) -> str:
         return f"[General Assistant Mode] {response}"
     
     # Try to get response from documents
-    result = st.session_state.chain({"question": query})
-    response = result["answer"]
-    
-    # Check if the response indicates no relevant information found
-    no_info_indicators = [
-        "I don't have enough information",
-        "I cannot find",
-        "I don't have access",
-        "no relevant information",
-        "cannot answer",
-        "don't have any specific information",
-        "no information available"
-    ]
-    
-    response_lower = response.lower()
-    if any(indicator.lower() in response_lower for indicator in no_info_indicators):
-        # Fallback to general assistant mode
+    try:
+        response = st.session_state.chain.invoke(query)
+        
+        # Check if the response indicates no relevant information found
+        no_info_indicators = [
+            "I don't have enough information",
+            "I cannot find",
+            "I don't have access",
+            "no relevant information",
+            "cannot answer",
+            "don't have any specific information",
+            "no information available"
+        ]
+        
+        response_lower = response.lower()
+        if any(indicator.lower() in response_lower for indicator in no_info_indicators):
+            # Fallback to general assistant mode
+            llm = ChatOpenAI(
+                model_name=st.session_state.model_name,
+                temperature=0.7
+            )
+            general_response = llm.invoke(
+                f"Act as a helpful assistant. If you can answer this question based on general knowledge, please do so. Question: {query}"
+            ).content
+            response = f"[General Assistant Mode] {general_response}"
+        else:
+            # Add source citations for document-based responses
+            retriever = st.session_state.vector_store.as_retriever(search_kwargs={"k": 3})
+            docs = retriever.get_relevant_documents(query)
+            sources = set()
+            for doc in docs:
+                sources.add(doc.metadata["source"])
+            
+            if sources:
+                response += "\n\nSources: " + ", ".join(sources)
+        
+        return response
+    except Exception as e:
+        # Fallback to general assistant mode if there's an error
         llm = ChatOpenAI(
             model_name=st.session_state.model_name,
             temperature=0.7
         )
-        general_response = llm.invoke(
-            f"Act as a helpful assistant. If you can answer this question based on general knowledge, please do so. Question: {query}"
+        response = llm.invoke(
+            f"Act as a helpful assistant. Question: {query}"
         ).content
-        response = f"[General Assistant Mode] {general_response}"
-    else:
-        # Add source citations for document-based responses
-        sources = set()
-        for doc in result["source_documents"]:
-            sources.add(doc.metadata["source"])
-        
-        if sources:
-            response += "\n\nSources: " + ", ".join(sources)
-    
-    return response
+        return f"[General Assistant Mode] {response}"
 
 def main():
     st.set_page_config(
