@@ -60,12 +60,17 @@ def update_vector_store(chunks: List[str], sources: List[str]):
     """Create or update vector store with new documents."""
     embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
     
+    # Create a persistent directory for ChromaDB
+    persist_directory = os.path.join(os.getcwd(), "chroma_db")
+    os.makedirs(persist_directory, exist_ok=True)
+    
     if st.session_state.vector_store is None:
         # Create new vector store if none exists
         vector_store = Chroma.from_texts(
             texts=chunks,
             embedding=embeddings,
-            metadatas=[{"source": source} for source in sources]
+            metadatas=[{"source": source} for source in sources],
+            persist_directory=persist_directory  # Add persistent storage
         )
         st.session_state.vector_store = vector_store
     else:
@@ -74,6 +79,7 @@ def update_vector_store(chunks: List[str], sources: List[str]):
             texts=chunks,
             metadatas=[{"source": source} for source in sources]
         )
+        st.session_state.vector_store.persist()  # Persist changes
 
 def create_chain(vector_store):
     """Create conversation chain with memory."""
