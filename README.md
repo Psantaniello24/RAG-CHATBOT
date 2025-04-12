@@ -7,6 +7,9 @@ A Retrieval-Augmented Generation (RAG) chatbot that combines document retrieval 
 ![Demo GIF](./chat_demo.gif)
 
 
+## Try it at : https://rag-chatbot-rhbbkumrtidnreczynmc59.streamlit.app/
+
+
 ## Features
 
 - Document processing (PDF and text files)
@@ -21,8 +24,7 @@ A Retrieval-Augmented Generation (RAG) chatbot that combines document retrieval 
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd rag-chatbot
+git clone https://github.com/Psantaniello24/RAG-CHATBOT
 ```
 
 2. Create and activate a virtual environment:
@@ -94,14 +96,6 @@ rag-chatbot/
 ├── README.md             # Project documentation
 └── .gitignore            # Git ignore rules
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
 
 ## License
 
